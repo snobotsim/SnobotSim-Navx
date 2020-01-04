@@ -1,0 +1,84 @@
+apply plugin: 'maven-publish'
+
+def outputsFolder = file("$project.buildDir/outputs")
+
+def libraryName = "NavxSimulation"
+
+def artifactGroupId = "edu.wpi.first.${libraryName}"
+def zipBaseName = "_GROUP_edu_wpi_first_${libraryName}_ID_${libraryName}-cpp_CLS"
+def jniBaseName = "_GROUP_edu_wpi_first_${libraryName}_ID_${libraryName}-jni_CLS"
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task cppHeadersZip(type: Zip) {
+    destinationDir = outputsFolder
+    baseName = zipBaseName
+    classifier = "headers"
+
+    from("$rootDir/src/main/native/include") {
+        into '/'
+    }
+}
+
+task cppSourcesZip(type: Zip) {
+    destinationDir = outputsFolder
+    baseName = zipBaseName
+    classifier = "sources"
+
+    from("$rootDir/src/main/native/cpp") {
+        into '/'
+    }
+}
+
+ext.maven_publishing_path = "$rootDir/build/maven_repo/"
+
+model {
+    publishing {
+        repositories {
+           maven {
+               url "build/maven_repo"
+           }
+        }
+
+        def jniLibraryTaskList = createComponentZipTasks($.components, [libraryName], zipBaseName, Zip, project, includeStandardZipFormat)
+    
+        def createAllTask
+        if(!project.hasProperty('ciBuild')) {
+            createAllTask = createAllCombined(project.packageNativeFilesInJar, "", "", Jar, project)
+        }
+    
+        publications {
+            snobot_sim_java(MavenPublication) {
+                groupId 'com.snobot.simulator'
+                artifactId "navx_simulator"
+                version release_version
+    
+                artifact jar
+                artifact javadocJar
+                artifact sourcesJar
+
+                jniLibraryTaskList.each {
+                    artifact it
+                }
+                
+                
+                artifact cppHeadersZip
+                artifact cppSourcesZip
+                artifact project.packageNativeFilesInJar
+    
+                if(!project.hasProperty('ciBuild')) {
+                    artifact createAllTask
+                }
+            }
+        }
+    
+    }
+}
